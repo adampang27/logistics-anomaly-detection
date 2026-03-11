@@ -21,14 +21,21 @@ normal_transit_times = np.random.randint(24, 73, size = 9500)
 anamoly_transit_times = np.random.uniform(6,12, size = 500)
 transit_times = np.append(normal_transit_times, anamoly_transit_times)
 
+# Shuffle the transit times so that the anomalies are distributed randomly
 random.shuffle(transit_times)
-df.sort_values(by="timestamp")
 
+# Create the core dataframe
 df = pd.DataFrame({
     "package_id": package_ids,
     "timestamp": timestamps,
-    "transit_time_hours": transit_times
+    "transit_time_hours": transit_times,
 })
+
+# Create the anomaly column where anything delivered in under 12 hours is an anomlay
+df["is_anomaly"] = (df["transit_time_hours"] < 12).astype(int)
+
+# Sort the dataframe by timestamp
+df.sort_values(by="timestamp", inplace=True)
 
 # Get the directory where this script is (src) and then go up one level to the root
 base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
