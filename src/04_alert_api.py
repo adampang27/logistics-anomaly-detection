@@ -12,7 +12,7 @@ endpoint so downstream consumers (e.g. a dashboard) can query them.
 In production, the in-memory store would be replaced with a database.
 """
 
-# FastAPI auto-generates interactive docs at /docs, useful for a demo
+# FastAPI automatically generates interactive docs at /docs
 app = FastAPI(title="Logistics Alert API")
 
 # Simple python list acting as a database for the prototype.
@@ -35,7 +35,7 @@ def trigger_alert(alert: AnomalyAlert):
     record["timestamp"] = str(datetime.now())
     alerts_db.append(record)
     print(f"ALERT: package {alert.package_id} | {alert.reason}")
-    return {"message": "Alert logged", "total_alerts": len(alerts)db)}
+    return {"message": "Alert logged", "total_alerts": len(alerts_db)}
 
 @app.get("/alerts")
 def get_alerts():

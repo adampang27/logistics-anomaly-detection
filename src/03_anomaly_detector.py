@@ -19,17 +19,19 @@ KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
 ALERT_API_URL = os.getenv("ALERT_API_URL", "http://alert-api:8000/alerts")
 
 def train_model():
-    df = pd.read_csv('../data/dummy_logistics_data.csv')
-    # Train only on normal data
+    df = pd.read_csv('data/dummy_logistics_data.csv')
+    # Train only on normal data so the model learns what good data looks like
     df = df[df['is_anomaly'] == 0] 
+    # Dataframe as sklearn needs a 2D array
     transit_time_hours = df[['transit_time_hours']] 
+    # random_state param to make it reproducible 
     clf = IsolationForest(random_state=42)
     clf.fit(transit_time_hours)
     return clf
 
 def consume_and_detect():
 
-    # Train the model once before polling Kafka
+    # Train the model once on historical data, then score live events
     # Trains on the full CSV which contains anomalies
     model = train_model()
 
@@ -52,8 +54,8 @@ def consume_and_detect():
         # -1 if anomalous, 1 if not
         # Make it return just an integer
         prediction = model.predict(feature)[0] 
-        # Float value for anomaly, More negative = further from normal
-        # For severity ranking in the alert
+        # decision_function gives a continuous value
+        # More negative means more anomalous, for severity ranking in the alert
         anomaly_score = model.decision_function(feature)[0]
 
         if prediction == -1:
@@ -71,6 +73,7 @@ def consume_and_detect():
                 data=json.dumps(alert).encode("utf-8"),
                 headers={"Content-Type": "application/json"}
             )
+            # Catch POST failures so a downed alert doesn't break the whole consumer loop
             try:
                 urllib.request.urlopen(req)
             except Exception as e:
