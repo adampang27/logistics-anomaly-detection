@@ -18,8 +18,9 @@ Flags events with anamolous transit times and associated HTTP alerts.
 KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
 ALERT_API_URL = os.getenv("ALERT_API_URL", "http://alert-api:8000/alerts")
 
-def train_model():
-    df = pd.read_csv('data/dummy_logistics_data.csv')
+def train_model(df=None):
+    if df is None:
+        df = pd.read_csv('data/dummy_logistics_data.csv')
     # Train only on normal data so the model learns what good data looks like
     df = df[df['is_anomaly'] == 0] 
     # Dataframe as sklearn needs a 2D array

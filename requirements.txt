@@ -3,3 +3,5 @@ numpy
 kafka-python
 fastapi[standard]
 scikit-learn
+pytest
+httpx
