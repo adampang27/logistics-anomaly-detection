@@ -1,9 +1,3 @@
-import json
-import time
-import pandas as pd 
-import os
-from kafka import KafkaProducer
-
 """
 Kafka Producer
 
@@ -11,7 +5,13 @@ Reads the generated CSV and streams each row as a JSON payload to a Kafka topic.
 Simulates live warehouse package scans.
 """
 
-#for future cloud hosting
+import json
+import time
+import pandas as pd 
+import os
+from kafka import KafkaProducer
+
+# Falls back to localhost:9092 for local development, reads KAFKA_BROKER env var for containerized runs
 KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
 TOPIC = "package-scans"
 
@@ -31,7 +31,7 @@ def stream_data(producer):
     df = pd.read_csv(file_path)
 
     for index, row in df.iterrows():
-        # Convert Pandas Series to dict so json.dumps() can seralize it
+        # Convert Pandas Series to dict so json.dumps() can serialize it
         packageScanPayload = row.to_dict()
         # Send to Kafka
         producer.send(TOPIC, value=packageScanPayload)

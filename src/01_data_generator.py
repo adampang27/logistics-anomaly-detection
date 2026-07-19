@@ -9,18 +9,22 @@ import numpy as np
 import random
 import os
 
+# Seed for reproducible runs
+np.random.seed(42)
+
 # Range of dates
 START_DATE = np.datetime64('2024-01-01')
 END_DATE = np.datetime64('2025-12-31')
-# Generate 100 timestamps between start and end dates
+# Generate 10,000 timestamps between start and end dates
 timestamps = pd.date_range(start=START_DATE, end=END_DATE, periods = 10000).tolist()
 # Generate package IDs (6 digits)
 package_ids = np.random.choice(np.arange(100_000,1_000_000), size=10000, replace = False)
-# Generate transit times (between 24 and 72 hours) with anamolies
+# Generate transit times (between 24 and 72 hours) with anomalies
 normal_transit_times = np.random.randint(24, 73, size = 9500)
 anamoly_transit_times = np.random.uniform(6,12, size = 500)
 transit_times = np.append(normal_transit_times, anamoly_transit_times)
 
+random.seed(42)
 # Shuffle the transit times so that the anomalies are distributed randomly
 random.shuffle(transit_times)
 
@@ -31,7 +35,7 @@ df = pd.DataFrame({
     "transit_time_hours": transit_times,
 })
 
-# Create the anomaly column where anything delivered in under 12 hours is an anomlay
+# Create the anomaly column where anything delivered in under 12 hours is an anomaly
 df["is_anomaly"] = (df["transit_time_hours"] < 12).astype(int)
 
 # Sort the dataframe by timestamp
