@@ -1,0 +1,73 @@
+# Local stack: Postgres for alert persistence, Kafka for event streaming,
+# three Python services (producer, detector, API). 
+services:
+
+  # Persists alerts across container restarts
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=logistics
+    ports:
+      - "5432:5432"
+    volumes: # named volume so data survives `docker compose down`
+      - pgdata:/var/lib/postgresql/data
+
+  # Single-node KRaft Kafka (no ZooKeeper). One container handles both
+  # broker (message routing) and controller (cluster metadata/leader election).
+  kafka:
+    image: apache/kafka:4.2.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk # fixed so restarts rejoin the same cluster
+
+      # 9092: client connections (producer/consumer); 9093: controller-only (leader election)
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      # Address Kafka gives to producer/containers on the Compose network
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092 
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093 # single-node quorum
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # Replication defaults to 3; with one broker, must be 1 or startup will fail.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+
+  alert-api:
+    build: .
+    command: fastapi run src/04_alert_api.py --port 8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - kafka
+
+  # Expose the host's ignored data directory at runtime without copying it into the image
+  anomaly-detector:
+    build: .
+    environment:
+      - KAFKA_BROKER=kafka:9092
+    command: python src/03_anomaly_detector.py
+    # Expose the host's ignored data directory at runtime without copying it into the image
+    depends_on:
+      - kafka
+      - alert-api
+    volumes:
+      - ./data:/app/data  
+
+  producer:
+    build: .
+    environment:
+      - KAFKA_BROKER=kafka:9092
+    command: python src/02_kafka_producer.py
+    depends_on:
+      - kafka
+    volumes:
+      - ./data:/app/data
+
+volumes:
+  pgdata:
