@@ -1,23 +1,44 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from datetime import datetime
+from sqlalchemy import create_engine, String
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
+
 
 """
-FastAPI Alert Microservice
+FastAPI alert service
 
-Receives POST requests from the anomaly detector when an anomalous
-package scan is flagged. Stores alerts in memory and exposes a GET
-endpoint so downstream consumers (e.g. a dashboard) can query them.
-
-In production, the in-memory store would be replaced with a database.
+Receives anomaly alerts, persists them to Postgres through SQLAlchemy,
+and returns the 50 newest alerts for downstream consumers.s
 """
 
-# FastAPI automatically generates interactive docs at /docs
+# FastAPI's interactive docs at /docs
 app = FastAPI(title="Logistics Alert API")
 
-# Simple python list acting as a database for the prototype.
-# Faster and zero setup, clears on every instance.
-alerts_db = []
+# SQLAlchemy's base registry
+class Base(DeclarativeBase):   
+    pass
+
+# Using SQLAlchemy ORM instead of raw psycopg2 
+# Same code works against Postgres and SQLite in tests without needing to rewrite every query
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    # Surrogate primary key
+    id: Mapped[int] = mapped_column(primary_key=True)
+    package_id: Mapped[int]
+    transit_time_hours: Mapped[float]
+    anomaly_score: Mapped[float]
+    reason: Mapped[str] = mapped_column(String(200)) # Text capped at 200 char
+    timestamp: Mapped[str] = mapped_column(String(50))
+    
+
+# create_engine stores the database configuration; create_all then conects
+# and creates the alerts table fi it does not exist.
+# 'postgres' is the Docker Compose service name used inside its network
+engine = create_engine("postgresql+psycopg2://postgres:password@postgres:5432/logistics")
+Base.metadata.create_all(engine)
+
 
 # Pydantic validates incoming JSON against this automatically.
 # If the consumer sends a string where it would expect an int,
@@ -30,15 +51,45 @@ class AnomalyAlert(BaseModel):
 
 @app.post("/alerts", status_code=201)
 def trigger_alert(alert: AnomalyAlert):
-    # Convert to dict so a timestamp can be appended
-    record = alert.dict()
-    record["timestamp"] = str(datetime.now())
-    alerts_db.append(record)
-    print(f"ALERT: package {alert.package_id} | {alert.reason}")
-    return {"message": "Alert logged", "total_alerts": len(alerts_db)}
+    # Session groups this database operation
+    with Session(engine) as session:
+        new_alert = Alert(
+            # Pulls in each field from Pydantic's Alert
+            package_id=alert.package_id,
+            transit_time_hours=alert.transit_time_hours,
+            anomaly_score=alert.anomaly_score,
+            reason=alert.reason,
+            timestamp=str(datetime.now())
+        )
+        # add() stages the row and commit() makes the insert permanent 
+        session.add(new_alert)
+        session.commit()
+
+        # Ask the database for 50 newest alerts instead of loading every row
+        total = session.query(Alert).count()
+    
+    # Gets how may rows in the alerts table
+    return {"message": "Alert logged", "total_alerts": total}
+
 
 @app.get("/alerts")
 def get_alerts():
-    # Get only the last 50 so the who list isn't dumped on each call
-    # Real version would be split into pages with date filters.
-    return {"alerts": alerts_db[-50:]}
+    # Get only the last 50 alerts so the whole list isn't dumped on each call
+    with Session(engine) as session:
+        # Querys the table for a list of Alert objects
+        alerts = session.query(Alert).order_by(Alert.id.desc()).limit(50).all()
+    
+    # Converting each Alert object back to a dict before returning it
+    return {
+        "alerts" : [
+            {
+                "package_id" : a.package_id,
+                "transit_time_hours" : a.transit_time_hours,
+                "anomaly_score" : a.anomaly_score,
+                "reason" : a.reason,
+                "timestamp" : a.timestamp,
+            }
+            for a in alerts
+        ]
+    }
+

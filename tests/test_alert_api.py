@@ -1,10 +1,22 @@
 import importlib
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.pool import StaticPool
 
 # Using importlib to be able to import files that start with digits
 app_module = importlib.import_module("src.04_alert_api")
 client = TestClient(app_module.app)
 
+# In memory SQLite normally hands out a blank database per connection
+# StaticPool forces every connection to reuse the same one
+# So the table created below is still there when a request later opens a new session
+test_engine = create_engine(
+    "sqlite://",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+) # new in-memory database, no docker
+app_module.Base.metadata.create_all(test_engine) # creates alerts table 
+app_module.engine = test_engine # swap Postgres out for SQLite
 def test_post_and_get_alerts():
     # Valid example 
     payload = {
@@ -37,7 +49,7 @@ def test_alert_cap_():
         "anomaly_score": -0.8,
         "reason": "Test anomaly"
     }
-    for i in range(59):
+    for i in range(60):
         response = client.post("/alerts", json=payload)
 
     retrieved = client.get("/alerts")

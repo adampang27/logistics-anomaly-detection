@@ -5,3 +5,5 @@ fastapi[standard]
 scikit-learn
 pytest
 httpx
+sqlalchemy
+psycopg2-binary
