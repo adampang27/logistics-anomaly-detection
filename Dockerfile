@@ -15,4 +15,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Default command that can be overridden in docker-compose
-CMD ["python", "src/01_data_generator.py"]
+CMD ["python", "src/data_generator.py"]

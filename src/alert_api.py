@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 from datetime import datetime
@@ -12,14 +14,11 @@ Receives anomaly alerts, persists them to Postgres through SQLAlchemy,
 and returns the 50 newest alerts for downstream consumers.s
 """
 
-# FastAPI's interactive docs at /docs
-app = FastAPI(title="Logistics Alert API")
-
 # SQLAlchemy's base registry
-class Base(DeclarativeBase):   
+class Base(DeclarativeBase):
     pass
 
-# Using SQLAlchemy ORM instead of raw psycopg2 
+# Using SQLAlchemy ORM instead of raw psycopg2
 # Same code works against Postgres and SQLite in tests without needing to rewrite every query
 class Alert(Base):
     __tablename__ = "alerts"
@@ -31,13 +30,22 @@ class Alert(Base):
     anomaly_score: Mapped[float]
     reason: Mapped[str] = mapped_column(String(200)) # Text capped at 200 char
     timestamp: Mapped[str] = mapped_column(String(50))
-    
+
 
 # create_engine stores the database configuration; create_all then conects
 # and creates the alerts table fi it does not exist.
 # 'postgres' is the Docker Compose service name used inside its network
 engine = create_engine("postgresql+psycopg2://postgres:password@postgres:5432/logistics")
-Base.metadata.create_all(engine)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(engine)
+    yield
+
+
+# FastAPI's interactive docs at /docs
+app = FastAPI(title="Logistics Alert API", lifespan=lifespan)
 
 
 # Pydantic validates incoming JSON against this automatically.
@@ -61,13 +69,13 @@ def trigger_alert(alert: AnomalyAlert):
             reason=alert.reason,
             timestamp=str(datetime.now())
         )
-        # add() stages the row and commit() makes the insert permanent 
+        # add() stages the row and commit() makes the insert permanent
         session.add(new_alert)
         session.commit()
 
         # Ask the database for 50 newest alerts instead of loading every row
         total = session.query(Alert).count()
-    
+
     # Gets how may rows in the alerts table
     return {"message": "Alert logged", "total_alerts": total}
 
@@ -78,7 +86,7 @@ def get_alerts():
     with Session(engine) as session:
         # Querys the table for a list of Alert objects
         alerts = session.query(Alert).order_by(Alert.id.desc()).limit(50).all()
-    
+
     # Converting each Alert object back to a dict before returning it
     return {
         "alerts" : [

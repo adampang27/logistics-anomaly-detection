@@ -1,9 +1,9 @@
 import os, json
 import numpy as np
 import pandas as pd
-from kafka import KafkaConsumer
 from sklearn.ensemble import IsolationForest
 import urllib.request
+import joblib
 
 """
 Kafka Consumer
@@ -22,18 +22,27 @@ def train_model(df=None):
     if df is None:
         df = pd.read_csv('data/dummy_logistics_data.csv')
     # Train only on normal data so the model learns what good data looks like
-    df = df[df['is_anomaly'] == 0] 
+    df = df[df['is_anomaly'] == 0]
     # Dataframe as sklearn needs a 2D array
-    transit_time_hours = df[['transit_time_hours']] 
-    # random_state param to make it reproducible 
+    transit_time_hours = df[['transit_time_hours']]
+    # random_state param to make it reproducible
     clf = IsolationForest(random_state=42)
     clf.fit(transit_time_hours)
     return clf
 
-def consume_and_detect():
+def retrain_model():
+    df = pd.read_csv('data/dummy_logistics_data.csv')
+    model = train_model(df)
 
-    # Train the model once on historical data, then score live events
-    # Trains on the full CSV which contains anomalies
+    # Saves the model to a file using joblib
+    os.makedirs("models", exist_ok=True)
+    joblib.dump(model, "models/isolation_forest.pkl")
+
+def consume_and_detect():
+    from kafka import KafkaConsumer
+
+    # Read the historical dataset, then fit only on normal rows so the model
+    # learns a baseline before scoring live events.
     model = train_model()
 
     # Setup the consumer
@@ -47,14 +56,14 @@ def consume_and_detect():
     # Block and process messages as they arrive
     for message in consumer:
         # for the already deseralized dict
-        data = message.value 
+        data = message.value
         # get the column from the dict
         transit_time_hours = data["transit_time_hours"]
         # however its just a column so reshape into a 2D array
         feature = np.array([[transit_time_hours]])
         # -1 if anomalous, 1 if not
         # Make it return just an integer
-        prediction = model.predict(feature)[0] 
+        prediction = model.predict(feature)[0]
         # decision_function gives a continuous value
         # More negative means more anomalous, for severity ranking in the alert
         anomaly_score = model.decision_function(feature)[0]
@@ -63,7 +72,7 @@ def consume_and_detect():
 
             print(f"Anomalous time detected: {transit_time_hours}")
 
-            alert = { 
+            alert = {
                 "package_id" : int(data["package_id"]),
                 "transit_time_hours": float(transit_time_hours),
                 "anomaly_score": float(anomaly_score),
@@ -79,8 +88,8 @@ def consume_and_detect():
                 urllib.request.urlopen(req)
             except Exception as e:
                 # To log and continue
-                print(f"Failed to send alert: {e}") 
-        
+                print(f"Failed to send alert: {e}")
+
 
 if __name__ == "__main__":
     consume_and_detect()

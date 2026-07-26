@@ -7,7 +7,7 @@ Simulates live warehouse package scans.
 
 import json
 import time
-import pandas as pd 
+import pandas as pd
 import os
 from kafka import KafkaProducer
 
@@ -35,7 +35,7 @@ def stream_data(producer):
         packageScanPayload = row.to_dict()
         # Send to Kafka
         producer.send(TOPIC, value=packageScanPayload)
-        
+
         # After 100 records kafka pops the payload and sends it
         if index % 100 == 0:
             producer.flush()

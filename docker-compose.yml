@@ -40,7 +40,7 @@ services:
 
   alert-api:
     build: .
-    command: fastapi run src/04_alert_api.py --port 8000
+    command: fastapi run src/alert_api.py --port 8000
     ports:
       - "8000:8000"
     depends_on:
@@ -51,7 +51,7 @@ services:
     build: .
     environment:
       - KAFKA_BROKER=kafka:9092
-    command: python src/03_anomaly_detector.py
+    command: python src/anomaly_detector.py
     # Expose the host's ignored data directory at runtime without copying it into the image
     depends_on:
       - kafka
@@ -63,7 +63,7 @@ services:
     build: .
     environment:
       - KAFKA_BROKER=kafka:9092
-    command: python src/02_kafka_producer.py
+    command: python src/kafka_producer.py
     depends_on:
       - kafka
     volumes:
