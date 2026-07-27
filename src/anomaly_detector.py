@@ -31,12 +31,16 @@ def train_model(df=None):
     return clf
 
 def retrain_model():
-    df = pd.read_csv('data/dummy_logistics_data.csv')
+    # Airflow does not run with this repo as cwd; resolve paths from this file.
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    data_path = os.path.join(base_dir, "data", "dummy_logistics_data.csv")
+    models_dir = os.path.join(base_dir, "models")
+
+    df = pd.read_csv(data_path)
     model = train_model(df)
 
-    # Saves the model to a file using joblib
-    os.makedirs("models", exist_ok=True)
-    joblib.dump(model, "models/isolation_forest.pkl")
+    os.makedirs(models_dir, exist_ok=True)
+    joblib.dump(model, os.path.join(models_dir, "isolation_forest.pkl"))
 
 def consume_and_detect():
     from kafka import KafkaConsumer
