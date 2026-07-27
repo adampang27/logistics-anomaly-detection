@@ -8,3 +8,4 @@ httpx
 sqlalchemy
 psycopg2-binary
 joblib
+boto3
