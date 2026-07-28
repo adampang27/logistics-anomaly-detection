@@ -21,12 +21,11 @@ ALERT_API_URL = os.getenv("ALERT_API_URL", "http://alert-api:8000/alerts")
 def train_model(df=None):
     if df is None:
         df = pd.read_csv('data/dummy_logistics_data.csv')
-    # Train only on normal data so the model learns what good data looks like
-    df = df[df['is_anomaly'] == 0]
+
     # Dataframe as sklearn needs a 2D array
     transit_time_hours = df[['transit_time_hours']]
     # random_state param to make it reproducible
-    clf = IsolationForest(random_state=42)
+    clf = IsolationForest(random_state=42,contamination=0.05)
     clf.fit(transit_time_hours)
     return clf
 
