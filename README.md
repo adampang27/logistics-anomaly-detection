@@ -1,8 +1,8 @@
 # Logistics Anomaly Detection
 
-This is a local learning project inspired by my time working at an Amazon
-sorting facility. Seeing how many packages moved through one shift made me
-curious about how the scan data behind that movement gets monitored.
+This project grew out of my time working at an Amazon sorting facility.
+Seeing how many packages moved through one shift made me curious about the
+scan data behind that movement.
 
 The project replays synthetic package records through Kafka. A consumer scores
 each record with an Isolation Forest model, sends flagged records to a FastAPI
