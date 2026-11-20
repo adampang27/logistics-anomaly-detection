@@ -5,8 +5,37 @@ Seeing how many packages moved through one shift made me curious about the
 scan data behind that movement.
 
 The project replays synthetic package records through Kafka. A consumer scores
-each record with an Isolation Forest model, sends flagged records to a FastAPI
-service, and stores the alerts in Postgres.
+each record's transit time with an Isolation Forest model and sends flagged
+records to a FastAPI service, which stores the alerts in Postgres.
+
+## Running it
+
+Start Docker Desktop or Docker Engine, then clone the repo and start the services.
+The repo includes the sample CSV.
+
+```bash
+git clone https://github.com/adampang27/logistics-anomaly-detection.git
+cd logistics-anomaly-detection
+docker compose up --build -d
+```
+
+Open `http://localhost:8000/alerts` in your browser or check it from a terminal.
+
+```bash
+curl http://localhost:8000/alerts
+```
+
+Once an alert appears, look up its `package_id` in `data/dummy_logistics_data.csv`
+and compare the transit time. The full replay takes about 17 minutes.
+
+If the endpoint stays down or the list stays empty after startup, check the logs.
+
+```bash
+docker compose ps -a
+docker compose logs --tail=50 postgres kafka alert-api producer anomaly-detector
+```
+
+When you're done, run `docker compose down`. Alerts persist in a Postgres volume.
 
 ## How it works
 
@@ -14,63 +43,48 @@ service, and stores the alerts in Postgres.
 generated CSV -> Kafka -> Isolation Forest -> FastAPI -> Postgres
 ```
 
-`data_generator.py` creates 10,000 package records. Most transit times sit
+`src/data_generator.py` creates 10,000 package records. Most transit times sit
 between 24 and 72 hours. I plant 250 unusually fast ones and 250 late ones,
-then label anything below 12 hours or above 72 as anomalous so the pipeline
-has known failures to catch.
+then label times below 12 hours or above 72 hours as anomalous (`is_anomaly = 1`).
 
-`kafka_producer.py` reads the CSV and sends one row every tenth of a second so
-the data arrives like a feed instead of one big batch. `anomaly_detector.py`
-scores the transit time with Isolation Forest. If the model flags it, the
-consumer posts an alert to FastAPI, and the API writes the row to Postgres.
-`GET /alerts` returns the 50 newest alerts.
+`src/kafka_producer.py` reads the CSV and sends one row every tenth of a second
+to the `package-scans` topic. At startup, `src/anomaly_detector.py` fits a
+scikit-learn Isolation Forest on the transit times from that same CSV. The
+`is_anomaly` labels are there for comparison.
+
+When the model flags a record, the consumer sends it to `POST /alerts`.
+The FastAPI service in `src/alert_api.py` saves the alert to Postgres through
+SQLAlchemy. `GET /alerts` returns up to 50 alerts, newest first.
 
 Everything runs locally with Docker Compose on a single Kafka broker. The model
 only looks at transit time. That kept the problem small enough to finish the
-full path: generate, stream, score, alert, and store.
+full path through the pipeline.
 
-## Running it
+## Running the tests
 
-```bash
-docker compose up --build
-```
-
-```bash
-curl http://localhost:8000/alerts
-```
-
-The full replay takes a while because of the delay between records. Compose
-starts the services in order, but it doesn't wait for each one to be ready
-before starting the next.
-
-To run the tests without the Compose stack:
+Use Python 3.11 from the project folder.
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pytest -q
+python -m pytest -q
 ```
 
-The API tests use in-memory SQLite, so they don't need Postgres running. There
-is also a MinIO upload script for archiving a generated batch under a
-date-based key, and a separate Airflow DAG for regenerating data and
-retraining the model. Airflow runs in standalone mode outside this Compose
-stack.
+You can run the tests with the Compose stack stopped. The API tests use
+in-memory SQLite.
 
 ## Batch archiving (MinIO)
 
-`upload_to_minio.py` pushes the generated CSV to local MinIO under a
-Hive-style date key (`year=2025/month=07/day=30/batch.csv`). The bucket
-is created on first run if it doesn't exist.
+MinIO starts with the rest of the stack. You can also start it on its own with
+`docker compose up -d minio`. With the Python environment active, run
+`python src/upload_to_minio.py` to upload the CSV to the `logistics-data` bucket.
+The script creates the bucket if needed and saves the file under the current
+date, for example `year=2025/month=07/day=30/batch.csv`. You can find the file in
+the MinIO console at `http://localhost:9001`.
 
-## Retraining (Airflow)
+## Saving a trained model
 
-A standalone Airflow DAG calls `generate_batch()` and `retrain_model()`
-on a schedule, serializing the updated model to `models/isolation_forest.pkl`.
-Runs outside the Compose stack in Airflow standalone mode.
-
-## Stack
-
-Python, Kafka, scikit-learn, FastAPI, SQLAlchemy, Postgres, Docker Compose,
-and MinIO.
+`retrain_model()` in `src/anomaly_detector.py` reads the CSV and saves a fitted
+model to `models/isolation_forest.pkl`. The Compose detector fits its own model
+from the CSV each time it starts.

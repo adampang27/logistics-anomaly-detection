@@ -11,8 +11,7 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the entire project
-COPY . .
+COPY src/ ./src/
 
 # Default command that can be overridden in docker-compose
 CMD ["python", "src/data_generator.py"]

@@ -62,7 +62,6 @@ def trigger_alert(alert: AnomalyAlert):
     # Session groups this database operation
     with Session(engine) as session:
         new_alert = Alert(
-            # Pulls in each field from Pydantic's Alert
             package_id=alert.package_id,
             transit_time_hours=alert.transit_time_hours,
             anomaly_score=alert.anomaly_score,

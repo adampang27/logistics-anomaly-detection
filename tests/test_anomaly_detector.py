@@ -2,13 +2,13 @@ import pandas as pd
 
 from src.anomaly_detector import train_model
 
-def test_model_predictions():
-    # Fake dataset to train on
-    df = pd.DataFrame({
-        "transit_time_hours": [27,21,29,20,31,18,33,16,35,14,37],
-        "is_anomaly": [0,0,0,0,0,0,0,0,0,0,0],
+def test_model_flags_an_isolated_transit_time():
+    training_data = pd.DataFrame({
+        # Cluster of typical times and a single anomaly
+        "transit_time_hours": list(range(20, 41)) + [120],
     })
+    model = train_model(training_data)
 
-    model = train_model(df)
+    shipments = pd.DataFrame({"transit_time_hours": [30, 125]})
 
-    assert model.predict([[500]])[0] == -1  # flagged anomalous
+    assert model.predict(shipments).tolist() == [1, -1]

@@ -2,7 +2,7 @@
 # three Python services (producer, detector, API). 
 services:
 
-  # Persists alerts across container restarts
+  # Alerts will persist across container restarts
   postgres:
     image: postgres:16-alpine
     environment:
@@ -11,8 +11,13 @@ services:
       - POSTGRES_DB=logistics
     ports:
       - "5432:5432"
-    volumes: # named volume so data survives `docker compose down`
+    volumes: # having a named volume so data survives `docker compose down`
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "logistics"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
 
   # Single-node KRaft Kafka (no ZooKeeper). One container handles both
   # broker (message routing) and controller (cluster metadata/leader election).
@@ -44,7 +49,8 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - kafka
+      postgres:
+        condition: service_healthy
 
   # Local object storage for batch archiving
   # API on 9000 , web console on 9001
